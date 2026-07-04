@@ -11,22 +11,17 @@ import (
 // 下面被注释掉的一段演示了这个崩溃 —— 你可以取消注释、跑一次亲眼看它 panic,
 // 然后再注释回去。
 func TestNewBookWritable(t *testing.T) {
-	// --- 亲眼看 nil-map panic(可选)---
-	// var bad Book
-	// bad.bids[100] = &PriceLevel{Price: 100} // 💥 panic: assignment to entry in nil map
-
 	b := NewBook()
 
-	// NewBook 之后,直接往三个 map 里写都不该 panic。
-	b.bids[100] = &PriceLevel{Price: 100}
-	b.asks[101] = &PriceLevel{Price: 101}
-	b.orders[1] = Order{ID: 1, Side: Buy, Price: 100, Qty: 10}
+	// NewBook 之后, 通过 AddOrder 写不该 panic。
+	b.AddOrder(Order{ID: 1, Side: Buy, Price: 100, Qty: 10})
+	b.AddOrder(Order{ID: 2, Side: Sell, Price: 101, Qty: 5})
 
-	if got := b.bids[100].Price; got != 100 {
-		t.Errorf("bids[100].Price = %d, 期望 100", got)
+	if got := b.bids.Get(100); got == nil || got.Price != 100 {
+		t.Errorf("bids[100] 应存在且 Price=100")
 	}
-	if got := b.asks[101].Price; got != 101 {
-		t.Errorf("asks[101].Price = %d, 期望 101", got)
+	if got := b.asks.Get(101); got == nil || got.Price != 101 {
+		t.Errorf("asks[101] 应存在且 Price=101")
 	}
 	if got := b.orders[1].Qty; got != 10 {
 		t.Errorf("orders[1].Qty = %d, 期望 10", got)
@@ -53,8 +48,8 @@ func TestAddPreservesArrival(t *testing.T) {
 	b.AddOrder(o2)
 
 	// 1) 买方 100 档应该存在, 且队列是 [1, 2]
-	lvl, ok := b.bids[100]
-	if !ok {
+	lvl := b.bids.Get(100)
+	if lvl == nil {
 		t.Fatal("bids[100] 不存在")
 	}
 	if len(lvl.Orders) != 2 {
@@ -84,10 +79,10 @@ func TestAddPreservesArrival(t *testing.T) {
 	o3 := Order{ID: 3, Side: Sell, Price: 105, Qty: 7}
 	b.AddOrder(o3)
 
-	if _, ok := b.asks[105]; !ok {
+	if b.asks.Get(105) == nil {
 		t.Error("asks[105] 应该存在")
 	}
-	if len(b.bids[100].Orders) != 2 {
+	if len(b.bids.Get(100).Orders) != 2 {
 		t.Error("加卖单不应影响买方档位")
 	}
 }
@@ -373,7 +368,7 @@ func TestSubmitFIFO(t *testing.T) {
 	}
 
 	// asks[100] 应该只剩 B
-	lvl := b.asks[100]
+	lvl := b.asks.Get(100)
 	if lvl == nil || len(lvl.Orders) != 1 || lvl.Orders[0] != 2 {
 		t.Errorf("asks[100] 应只剩 [2], 实际 %v", lvl.Orders)
 	}
@@ -607,7 +602,7 @@ func TestCancel(t *testing.T) {
 		t.Fatalf("CancelOrder(2) 报错: %v", err)
 	}
 
-	lvl := b.bids[100]
+	lvl := b.bids.Get(100)
 	if lvl == nil {
 		t.Fatal("撤 B 后 bids[100] 不应该消失")
 	}
@@ -635,7 +630,7 @@ func TestCancel(t *testing.T) {
 	}
 
 	// 档位应该被清理掉
-	if _, exists := b.bids[100]; exists {
+	if b.bids.Get(100) != nil {
 		t.Error("全部撤完后 bids[100] 应该被删除(避免幽灵价)")
 	}
 
@@ -675,7 +670,7 @@ func TestModify(t *testing.T) {
 	if err := b.ModifyOrder(2, 100, 5); err != nil {
 		t.Fatalf("纯减量报错: %v", err)
 	}
-	lvl := b.bids[100]
+	lvl := b.bids.Get(100)
 	if lvl.Orders[0] != 1 || lvl.Orders[1] != 2 || lvl.Orders[2] != 3 {
 		t.Errorf("纯减量后 Orders = %v, 期望 [1, 2, 3](位置不变)", lvl.Orders)
 	}
@@ -688,7 +683,7 @@ func TestModify(t *testing.T) {
 	if err := b.ModifyOrder(2, 100, 20); err != nil {
 		t.Fatalf("增量报错: %v", err)
 	}
-	lvl = b.bids[100]
+	lvl = b.bids.Get(100)
 	if len(lvl.Orders) != 3 {
 		t.Fatalf("增量后 Orders 长度 = %d, 期望 3", len(lvl.Orders))
 	}
@@ -704,14 +699,14 @@ func TestModify(t *testing.T) {
 	if err := b.ModifyOrder(2, 105, 20); err != nil {
 		t.Fatalf("改价报错: %v", err)
 	}
-	lvl100 := b.bids[100]
+	lvl100 := b.bids.Get(100)
 	if len(lvl100.Orders) != 2 {
 		t.Fatalf("改价后 bids[100] 长度 = %d, 期望 2", len(lvl100.Orders))
 	}
 	if lvl100.Orders[0] != 1 || lvl100.Orders[1] != 3 {
 		t.Errorf("改价后 bids[100] = %v, 期望 [1, 3]", lvl100.Orders)
 	}
-	lvl105 := b.bids[105]
+	lvl105 := b.bids.Get(105)
 	if lvl105 == nil || len(lvl105.Orders) != 1 || lvl105.Orders[0] != 2 {
 		t.Errorf("改价后 bids[105] 应只有 [2]")
 	}
