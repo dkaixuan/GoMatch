@@ -73,8 +73,19 @@ Gin Handler → Command channel → Engine (单 goroutine) → Book
 ## 测试
 
 ```bash
-go test ./matching/ -v
+go test ./... -v
 ```
+
+## Roadmap
+
+- [x] M0-M4 基础：订单簿、撮合引擎、并发模型、HTTP API、做市 bot（[大纲](docs/00-syllabus.md)）
+- [x] M5 性能优化：BestBid/BestAsk O(n) → O(1)
+- [ ] M6 资金账户：余额、冻结、结算
+- [ ] M7 多币对
+- [ ] M8 WebSocket 行情
+- [ ] M9 前端 UI
+
+进阶课程详见 [docs/01-advanced-syllabus.md](docs/01-advanced-syllabus.md)。
 
 ## License
 
