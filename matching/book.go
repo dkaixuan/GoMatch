@@ -44,6 +44,12 @@ func (b *Book) BestAsk() (int64, bool) {
 	return b.asks.MinPrice()
 }
 
+// GetOrder 查询订单, 不存在返回零值和 false。
+func (b *Book) GetOrder(orderID int64) (Order, bool) {
+	o, exists := b.orders[orderID]
+	return o, exists
+}
+
 // CancelOrder 从订单簿中撤销指定 ID 的订单。
 func (b *Book) CancelOrder(orderID int64) error {
 	order := b.orders[orderID]
@@ -152,11 +158,23 @@ func (b *Book) Submit(order Order) ([]Trade, error) {
 		}
 
 		order.Qty -= fill
+
+		var buyerOwner, sellerOwner int64
+		if order.Side == Buy {
+			buyerOwner = order.OwnerID
+			sellerOwner = maker.OwnerID
+		} else {
+			buyerOwner = maker.OwnerID
+			sellerOwner = order.OwnerID
+		}
+
 		trades = append(trades, Trade{
-			TakerOrderID: order.ID,
-			MakerOrderID: makerID,
-			Price:        bestPrice,
-			Qty:          fill,
+			TakerOrderID:  order.ID,
+			MakerOrderID:  makerID,
+			BuyerOwnerID:  buyerOwner,
+			SellerOwnerID: sellerOwner,
+			Price:         bestPrice,
+			Qty:           fill,
 		})
 	}
 

@@ -38,6 +38,8 @@ type Order struct {
 type Trade struct {
 	TakerOrderID int64 // 主动方(吃单方)
 	MakerOrderID int64 // 被动方(挂单方)
+	BuyerOwnerID  int64 // 买方用户 ID
+	SellerOwnerID int64 // 卖方用户 ID
 	Price        int64 // 成交价 = maker 的挂单价
 	Qty          int64 // 成交量
 }

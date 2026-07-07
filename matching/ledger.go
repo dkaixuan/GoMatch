@@ -42,23 +42,32 @@ func (l *Ledger) account(owner int64) *Account {
 //
 // 你来实现。
 func (l *Ledger) Deposit(owner int64, asset string, amount int64) {
-	// TODO: 你来写
+	account := l.account(owner)
+	if amount >= 0 {
+		account.Available[asset] += amount
+	}
 }
 
 // Available 查询用户某种资产的可用余额。
 //
 // 你来实现。
 func (l *Ledger) Available(owner int64, asset string) int64 {
-	// TODO: 你来写
-	return 0
+	accounts := l.accounts[owner]
+	if accounts == nil {
+		return 0
+	}
+	return accounts.Available[asset]
 }
 
 // Frozen 查询用户某种资产的冻结余额。
 //
 // 你来实现。
 func (l *Ledger) Frozen(owner int64, asset string) int64 {
-	// TODO: 你来写
-	return 0
+	accounts := l.accounts[owner]
+	if accounts == nil {
+		return 0
+	}
+	return accounts.Frozen[asset]
 }
 
 // Freeze 冻结: 把 amount 从可用挪到冻结。
@@ -66,7 +75,12 @@ func (l *Ledger) Frozen(owner int64, asset string) int64 {
 //
 // 你来实现。
 func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
-	// TODO: 你来写
+	account := l.account(owner)
+	if account.Available[asset] < amount {
+		return ErrInsufficientBalance
+	}
+	account.Available[asset] -= amount
+	account.Frozen[asset] += amount
 	return nil
 }
 
@@ -74,5 +88,33 @@ func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
 //
 // 你来实现。
 func (l *Ledger) Unfreeze(owner int64, asset string, amount int64) {
-	// TODO: 你来写
+	account := l.account(owner)
+	account.Frozen[asset] -= amount
+	account.Available[asset] += amount
+}
+
+// Settle 结算一笔成交, 四笔账:
+//
+//	买家: 冻结 quote(USD) 扣 price*qty, 可用 base(ETH) 加 qty
+//	卖家: 冻结 base(ETH) 扣 qty,        可用 quote(USD) 加 price*qty
+//
+// base = 交易的货(如 "ETH"), quote = 计价货币(如 "USD")
+//
+// 你来实现。
+func (l *Ledger) Settle(buyer, seller int64, base, quote string, price, qty int64) {
+	accounts := l.accounts[buyer]
+	cost := price * qty
+	if accounts == nil {
+		panic("buyer account not found")
+	}
+	sellerAccounts := l.accounts[seller]
+	if sellerAccounts == nil {
+		panic("seller account not found")
+	}
+
+	l.account(buyer).Frozen[quote] -= cost
+	l.account(buyer).Available[base] += qty
+
+	l.account(seller).Frozen[base] -= qty
+	l.account(seller).Available[quote] += cost
 }
