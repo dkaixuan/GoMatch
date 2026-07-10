@@ -19,9 +19,6 @@ func (s Symbol) String() string {
 }
 
 // ParseSymbol 从字符串解析币对, 如 "ETH/USD" → Symbol{Base:"ETH", Quote:"USD"}。
-// 格式不对返回 ErrInvalidSymbol。
-//
-// 你来实现。
 func ParseSymbol(s string) (Symbol, error) {
 	parts := strings.Split(s, "/") // 提示: 用 strings.Split
 	if len(parts) != 2 {

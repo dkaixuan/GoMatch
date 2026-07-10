@@ -29,8 +29,6 @@ func (r *Router) Register(ctx context.Context, sym Symbol) {
 }
 
 // Place 下单到指定币对。
-//
-// 你来实现。
 func (r *Router) Place(ctx context.Context, sym Symbol, order Order) ([]Trade, error) {
 	engine := r.engines[sym]
 	if engine == nil {
@@ -41,8 +39,6 @@ func (r *Router) Place(ctx context.Context, sym Symbol, order Order) ([]Trade, e
 }
 
 // Cancel 撤单。
-//
-// 你来实现。
 func (r *Router) Cancel(ctx context.Context, sym Symbol, orderID int64) error {
 	engine := r.engines[sym]
 	if engine == nil {
@@ -52,8 +48,6 @@ func (r *Router) Cancel(ctx context.Context, sym Symbol, orderID int64) error {
 }
 
 // GetSnapshot 获取某币对的盘口快照。
-//
-// 你来实现。
 func (r *Router) GetSnapshot(ctx context.Context, sym Symbol) (BookSnapshot, error) {
 	engine := r.engines[sym]
 	if engine == nil {

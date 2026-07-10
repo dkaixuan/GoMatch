@@ -17,10 +17,7 @@ type PlaceOrderRequest struct {
 	Qty     int64  `json:"qty"`
 }
 
-// SetupRouter 创建 Gin 路由, 所有 handler 都通过 Engine 的方法访问簿。
-// Handler 是薄的、无状态的: 解析 JSON → 调 Engine 方法 → 返回结果。
-//
-// 你来实现三个 handler。
+// SetupRouter 创建 Gin 路由。
 func SetupRouter(e *Engine) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

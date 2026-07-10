@@ -42,9 +42,7 @@ func (l *Ledger) account(owner int64) *Account {
 	return acc
 }
 
-// Deposit 入金: 给用户的某种资产增加可用余额。
-//
-// 你来实现。
+// Deposit 入金。
 func (l *Ledger) Deposit(owner int64, asset string, amount int64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -55,8 +53,6 @@ func (l *Ledger) Deposit(owner int64, asset string, amount int64) {
 }
 
 // Available 查询用户某种资产的可用余额。
-//
-// 你来实现。
 func (l *Ledger) Available(owner int64, asset string) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -68,8 +64,6 @@ func (l *Ledger) Available(owner int64, asset string) int64 {
 }
 
 // Frozen 查询用户某种资产的冻结余额。
-//
-// 你来实现。
 func (l *Ledger) Frozen(owner int64, asset string) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -81,9 +75,6 @@ func (l *Ledger) Frozen(owner int64, asset string) int64 {
 }
 
 // Freeze 冻结: 把 amount 从可用挪到冻结。
-// 可用不足时返回 ErrInsufficientBalance, 且不改变任何余额。
-//
-// 你来实现。
 func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -97,8 +88,6 @@ func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
 }
 
 // Unfreeze 解冻: 把 amount 从冻结挪回可用。
-//
-// 你来实现。
 func (l *Ledger) Unfreeze(owner int64, asset string, amount int64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -107,14 +96,7 @@ func (l *Ledger) Unfreeze(owner int64, asset string, amount int64) {
 	account.Available[asset] += amount
 }
 
-// Settle 结算一笔成交, 四笔账:
-//
-//	买家: 冻结 quote(USD) 扣 price*qty, 可用 base(ETH) 加 qty
-//	卖家: 冻结 base(ETH) 扣 qty,        可用 quote(USD) 加 price*qty
-//
-// base = 交易的货(如 "ETH"), quote = 计价货币(如 "USD")
-//
-// 你来实现。
+// Settle 结算一笔成交。
 func (l *Ledger) Settle(buyer, seller int64, base, quote string, price, qty int64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

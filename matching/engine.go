@@ -59,11 +59,7 @@ func NewEngineWithLedger(ledger *Ledger, base, quote string) *Engine {
 //
 //	go engine.Run(ctx)
 //
-// 用 select 监听:
-//   - ctx.Done() → 退出
-//   - cmds channel → 取出命令, 分派给 book 的方法, 把结果发回 Reply
-//
-// 你来实现。
+// Run 是引擎的主循环, 应在独立 goroutine 中运行。
 func (e *Engine) Run(ctx context.Context) {
 	for {
 		select {
@@ -87,7 +83,7 @@ func (e *Engine) Run(ctx context.Context) {
 // Place 提交一笔订单, 同步等待结果。
 // 如果 ctx 被取消, 立刻返回 ctx.Err(), 不卡死。
 //
-// 你来实现。
+// Place 提交一笔订单, 同步等待结果。
 func (e *Engine) Place(ctx context.Context, order Order) ([]Trade, error) {
 	reply := make(chan Result, 1)
 
@@ -106,9 +102,7 @@ func (e *Engine) Place(ctx context.Context, order Order) ([]Trade, error) {
 }
 
 // Cancel 撤销一笔订单, 同步等待结果。
-// 如果 ctx 被取消, 立刻返回 ctx.Err(), 不卡死。
-//
-// 你来实现。
+// Cancel 撤销一笔订单, 同步等待结果。
 func (e *Engine) Cancel(ctx context.Context, orderID int64) error {
 	reply := make(chan Result, 1)
 	select {

@@ -25,7 +25,6 @@ type MarketMaker struct {
 //	bid = center - halfSpread
 //	ask = center + halfSpread
 //
-// 你来实现(改造现有 Quotes, 保持 inventory=0 时行为不变)。
 func (m *MarketMaker) Quotes(mid int64) (bid, ask int64) {
 	center := mid
 	if m.MaxInventory != 0 {
@@ -78,11 +77,6 @@ func (m *MarketMaker) Step(mid int64) {
 }
 
 // OnFill 在 bot 的订单成交时调用, 更新库存。
-//
-//	side: "buy" 或 "sell"
-//	qty: 成交数量
-//
-// 你来实现。
 func (m *MarketMaker) OnFill(side string, qty int64) {
 	if "buy" == side {
 		m.Inventory += qty
@@ -98,12 +92,7 @@ type Fill struct {
 	Qty  int64
 }
 
-// Run 是做市 bot 的主循环:
-//   - ticker channel 触发时: 调 Step(mid) 刷新报价
-//   - fills channel 收到成交时: 调 OnFill 更新库存
-//   - ctx 取消时: 退出
-//
-// 你来实现。
+// Run 是做市 bot 的主循环。
 func (m *MarketMaker) Run(ctx context.Context, mid func() int64, ticker <-chan struct{}, fills <-chan Fill) {
 	for {
 		select {
