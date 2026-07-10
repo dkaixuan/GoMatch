@@ -1,6 +1,9 @@
 package matching
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 var ErrInsufficientBalance = errors.New("insufficient balance")
 
@@ -15,6 +18,7 @@ type Account struct {
 
 // Ledger 是所有用户的账本。
 type Ledger struct {
+	mu       sync.Mutex
 	accounts map[int64]*Account // ownerID → 账户
 }
 
@@ -25,7 +29,7 @@ func NewLedger() *Ledger {
 	}
 }
 
-// account 取或建一个用户的账户(内部用)。
+// account 取或建一个用户的账户(内部用, 调用者必须已持锁)。
 func (l *Ledger) account(owner int64) *Account {
 	acc := l.accounts[owner]
 	if acc == nil {
@@ -42,6 +46,8 @@ func (l *Ledger) account(owner int64) *Account {
 //
 // 你来实现。
 func (l *Ledger) Deposit(owner int64, asset string, amount int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	account := l.account(owner)
 	if amount >= 0 {
 		account.Available[asset] += amount
@@ -52,6 +58,8 @@ func (l *Ledger) Deposit(owner int64, asset string, amount int64) {
 //
 // 你来实现。
 func (l *Ledger) Available(owner int64, asset string) int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	accounts := l.accounts[owner]
 	if accounts == nil {
 		return 0
@@ -63,6 +71,8 @@ func (l *Ledger) Available(owner int64, asset string) int64 {
 //
 // 你来实现。
 func (l *Ledger) Frozen(owner int64, asset string) int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	accounts := l.accounts[owner]
 	if accounts == nil {
 		return 0
@@ -75,6 +85,8 @@ func (l *Ledger) Frozen(owner int64, asset string) int64 {
 //
 // 你来实现。
 func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	account := l.account(owner)
 	if account.Available[asset] < amount {
 		return ErrInsufficientBalance
@@ -88,6 +100,8 @@ func (l *Ledger) Freeze(owner int64, asset string, amount int64) error {
 //
 // 你来实现。
 func (l *Ledger) Unfreeze(owner int64, asset string, amount int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	account := l.account(owner)
 	account.Frozen[asset] -= amount
 	account.Available[asset] += amount
@@ -102,6 +116,8 @@ func (l *Ledger) Unfreeze(owner int64, asset string, amount int64) {
 //
 // 你来实现。
 func (l *Ledger) Settle(buyer, seller int64, base, quote string, price, qty int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	accounts := l.accounts[buyer]
 	cost := price * qty
 	if accounts == nil {
