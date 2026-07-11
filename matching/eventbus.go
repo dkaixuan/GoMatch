@@ -14,7 +14,7 @@ type Event struct {
 type EventBus struct {
 	mu   sync.RWMutex
 	subs map[int]chan Event // subscriberID → channel
-	next int               // 下一个订阅者 ID
+	next int                // 下一个订阅者 ID
 }
 
 // NewEventBus 创建事件总线。
@@ -26,16 +26,33 @@ func NewEventBus() *EventBus {
 
 // Subscribe 注册一个订阅者, 返回 ID 和接收事件的 channel。
 func (b *EventBus) Subscribe(bufSize int) (int, <-chan Event) {
-	// TODO
-	return 0, nil
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.next++
+	ch := make(chan Event, bufSize)
+	b.subs[b.next] = ch
+	return b.next, ch
 }
 
 // Unsubscribe 取消订阅, 关闭 channel。
 func (b *EventBus) Unsubscribe(id int) {
-	// TODO
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if ch, ok := b.subs[id]; ok {
+		close(ch)
+		delete(b.subs, id)
+	}
+
 }
 
 // Publish 向所有订阅者发送事件(非阻塞, 满了就丢)。
 func (b *EventBus) Publish(event Event) {
-	// TODO
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for _, ch := range b.subs {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
 }

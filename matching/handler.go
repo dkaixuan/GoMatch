@@ -1,10 +1,12 @@
 package matching
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 // PlaceOrderRequest 是 POST /orders 的请求体。
@@ -19,6 +21,15 @@ type PlaceOrderRequest struct {
 
 // SetupRouter 创建 Gin 路由。
 func SetupRouter(e *Engine) *gin.Engine {
+	return SetupRouterWithBus(e, nil)
+}
+
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+// SetupRouterWithBus 创建带 WebSocket 推送的 Gin 路由。
+func SetupRouterWithBus(e *Engine, bus *EventBus) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
@@ -66,6 +77,48 @@ func SetupRouter(e *Engine) *gin.Engine {
 		}
 		c.Status(http.StatusOK)
 	})
+
+	// GET /ws — WebSocket 实时推送
+	if bus != nil {
+		r.GET("/ws", func(c *gin.Context) {
+			conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			id, ch := bus.Subscribe(64)
+			defer bus.Unsubscribe(id)
+
+			// 读 goroutine: 检测客户端断开
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for {
+					if _, _, err := conn.ReadMessage(); err != nil {
+						return
+					}
+				}
+			}()
+
+			// 写循环: 把事件推给客户端
+			for {
+				select {
+				case event, ok := <-ch:
+					if !ok {
+						return
+					}
+					data, _ := json.Marshal(event)
+					if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+						return
+					}
+				case <-done:
+					return
+				}
+			}
+		})
+	}
+
 	return r
 }
 

@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // TestPostOrders 检查 POST /orders 下单接口。
@@ -132,5 +136,48 @@ func TestDeleteOrders(t *testing.T) {
 
 	if w3.Code != http.StatusNotFound {
 		t.Errorf("二次 DELETE: status = %d, 期望 404", w3.Code)
+	}
+}
+
+// TestWebSocket 检查 WebSocket 连接能收到成交事件。
+func TestWebSocket(t *testing.T) {
+	bus := NewEventBus()
+	e := NewEngine()
+	e.SetEventBus(bus)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	router := SetupRouterWithBus(e, bus)
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	// 连接 WebSocket
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws"
+	ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("WebSocket 连接失败: %v", err)
+	}
+	defer ws.Close()
+
+	// 挂卖单 + 买单成交
+	e.Place(ctx, Order{ID: 1, Side: Sell, Type: Limit, Price: 100, Qty: 10})
+	e.Place(ctx, Order{ID: 2, Side: Buy, Type: Limit, Price: 100, Qty: 10})
+
+	// 应收到事件
+	ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, msg, err := ws.ReadMessage()
+	if err != nil {
+		t.Fatalf("读 WebSocket 消息失败: %v", err)
+	}
+
+	var event Event
+	if err := json.Unmarshal(msg, &event); err != nil {
+		t.Fatalf("解析事件 JSON 失败: %v", err)
+	}
+
+	if event.Type != "trade" && event.Type != "book_update" {
+		t.Errorf("事件类型 = %q, 期望 trade 或 book_update", event.Type)
 	}
 }

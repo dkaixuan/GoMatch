@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -101,5 +102,48 @@ func TestEventBusMultipleSubscribers(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("订阅者 %d 超时", i)
 		}
+	}
+}
+
+// TestEngineEmitsEvents 检查 Engine 成交后通过 EventBus 发出事件。
+func TestEngineEmitsEvents(t *testing.T) {
+	bus := NewEventBus()
+	e := NewEngine()
+	e.SetEventBus(bus)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	_, ch := bus.Subscribe(10)
+
+	// 挂一笔卖单(不成交, 只发 book_update)
+	e.Place(ctx, Order{ID: 1, Side: Sell, Type: Limit, Price: 100, Qty: 10})
+
+	// 提交买单, 成交 → 应发 trade 事件 + book_update 事件
+	e.Place(ctx, Order{ID: 2, Side: Buy, Type: Limit, Price: 100, Qty: 10})
+
+	// 收集事件
+	var tradeEvents, bookEvents int
+	timeout := time.After(time.Second)
+	for {
+		select {
+		case ev := <-ch:
+			switch ev.Type {
+			case "trade":
+				tradeEvents++
+			case "book_update":
+				bookEvents++
+			}
+		case <-timeout:
+			goto done
+		}
+	}
+done:
+	if tradeEvents < 1 {
+		t.Errorf("trade 事件 = %d, 期望 >= 1", tradeEvents)
+	}
+	if bookEvents < 1 {
+		t.Errorf("book_update 事件 = %d, 期望 >= 1", bookEvents)
 	}
 }

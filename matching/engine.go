@@ -31,9 +31,11 @@ type Result struct {
 type Engine struct {
 	book   *Book
 	cmds   chan Command
-	ledger *Ledger // 可选, nil 表示不做余额检查
-	base   string  // 如 "ETH"
-	quote  string  // 如 "USD"
+	ledger *Ledger    // 可选, nil 表示不做余额检查
+	bus    *EventBus  // 可选, nil 表示不发事件
+	base   string     // 如 "ETH"
+	quote  string     // 如 "USD"
+	symbol Symbol
 }
 
 // NewEngine 创建引擎(无 Ledger, 向后兼容)。
@@ -52,7 +54,13 @@ func NewEngineWithLedger(ledger *Ledger, base, quote string) *Engine {
 		ledger: ledger,
 		base:   base,
 		quote:  quote,
+		symbol: Symbol{Base: base, Quote: quote},
 	}
+}
+
+// SetEventBus 设置事件总线(可选)。
+func (e *Engine) SetEventBus(bus *EventBus) {
+	e.bus = bus
 }
 
 // Run 是引擎的主循环, 应在独立 goroutine 中运行:
@@ -187,6 +195,16 @@ func (e *Engine) handlePlace(cmd Command) {
 		}
 	}
 
+	// 5. 发布事件
+	if e.bus != nil {
+		for _, trade := range trades {
+			e.bus.Publish(Event{Type: "trade", Symbol: e.symbol, Data: trade})
+		}
+		if len(trades) > 0 {
+			e.bus.Publish(Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
+		}
+	}
+
 	cmd.Reply <- Result{Trades: trades}
 }
 
@@ -206,6 +224,11 @@ func (e *Engine) handleCancel(cmd Command) {
 		} else {
 			e.ledger.Unfreeze(order.OwnerID, e.base, order.Qty)
 		}
+	}
+
+	// 发布盘口变化事件
+	if e.bus != nil {
+		e.bus.Publish(Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
 	}
 
 	cmd.Reply <- Result{}
