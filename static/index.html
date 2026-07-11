@@ -3,78 +3,144 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GoMatch</title>
+<title>GoMatch Exchange</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
-h1 { text-align: center; color: #00d4ff; margin-bottom: 20px; font-size: 24px; }
-.container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; }
-.panel { background: #16213e; border-radius: 8px; padding: 16px; }
-.panel h2 { font-size: 14px; color: #888; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
-table { width: 100%; border-collapse: collapse; }
-th { font-size: 11px; color: #666; text-align: right; padding: 4px 8px; border-bottom: 1px solid #333; }
-td { font-size: 13px; text-align: right; padding: 4px 8px; }
-.ask { color: #ff4757; }
-.bid { color: #2ed573; }
-.trade-row { border-bottom: 1px solid #222; }
-.trade-buy { color: #2ed573; }
-.trade-sell { color: #ff4757; }
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
-.form-group input, .form-group select {
-  width: 100%; padding: 8px; background: #0f3460; border: 1px solid #333;
-  color: #e0e0e0; border-radius: 4px; font-family: inherit;
+body { font-family: -apple-system, 'Segoe UI', Roboto, monospace; background: #0b0e11; color: #eaecef; }
+
+/* 顶栏 */
+.header {
+  background: #12151a; border-bottom: 1px solid #1e2329;
+  padding: 12px 24px; display: flex; align-items: center; gap: 20px;
 }
-.btn { width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer;
-  font-family: inherit; font-weight: bold; font-size: 14px; margin-top: 4px; }
-.btn-buy { background: #2ed573; color: #000; }
-.btn-sell { background: #ff4757; color: #fff; }
+.header h1 { font-size: 18px; color: #f0b90b; font-weight: 700; }
+.header .pair { font-size: 20px; font-weight: 700; }
+.header .last-price { font-size: 24px; font-weight: 700; margin-left: auto; }
+.header .last-price.up { color: #0ecb81; }
+.header .last-price.down { color: #f6465d; }
+.header .ws-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.header .ws-dot.on { background: #0ecb81; }
+.header .ws-dot.off { background: #f6465d; }
+
+/* 主体布局 */
+.main { display: grid; grid-template-columns: 320px 1fr 300px; height: calc(100vh - 52px); }
+
+/* 盘口 */
+.orderbook { background: #12151a; border-right: 1px solid #1e2329; display: flex; flex-direction: column; }
+.orderbook-header { padding: 12px 16px; font-size: 12px; color: #848e9c; border-bottom: 1px solid #1e2329;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: right; }
+.orderbook-asks, .orderbook-bids { flex: 1; overflow-y: auto; }
+.orderbook-asks { display: flex; flex-direction: column; justify-content: flex-end; }
+.ob-row { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 2px 16px;
+  font-size: 12px; text-align: right; position: relative; cursor: default; }
+.ob-row:hover { background: rgba(255,255,255,0.03); }
+.ob-row .depth-bar { position: absolute; right: 0; top: 0; bottom: 0; opacity: 0.12; }
+.ob-row.ask .depth-bar { background: #f6465d; }
+.ob-row.bid .depth-bar { background: #0ecb81; }
+.ob-row.ask .price { color: #f6465d; }
+.ob-row.bid .price { color: #0ecb81; }
+.ob-row .qty { color: #eaecef; }
+.ob-row .total { color: #848e9c; }
+
+/* 价差 */
+.spread-bar { padding: 8px 16px; background: #1b1f26; text-align: center;
+  font-size: 12px; color: #848e9c; border-top: 1px solid #1e2329; border-bottom: 1px solid #1e2329; }
+.spread-bar .spread-price { color: #f0b90b; font-weight: 700; font-size: 16px; margin: 0 8px; }
+
+/* 成交记录 */
+.trades { background: #12151a; display: flex; flex-direction: column; }
+.trades-title { padding: 12px 16px; font-size: 13px; color: #848e9c; border-bottom: 1px solid #1e2329; font-weight: 600; }
+.trades-header { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 4px 16px;
+  font-size: 11px; color: #555; text-align: right; }
+.trades-list { flex: 1; overflow-y: auto; }
+.trade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 3px 16px;
+  font-size: 12px; text-align: right; animation: tradeFlash 0.5s; }
+.trade-row .t-price.buy { color: #0ecb81; }
+.trade-row .t-price.sell { color: #f6465d; }
+.trade-row .t-qty { color: #eaecef; }
+.trade-row .t-time { color: #555; }
+@keyframes tradeFlash { from { background: rgba(240,185,11,0.1); } to { background: transparent; } }
+
+/* 下单面板 */
+.order-panel { background: #12151a; border-left: 1px solid #1e2329; padding: 16px; display: flex; flex-direction: column; }
+.order-panel h2 { font-size: 13px; color: #848e9c; margin-bottom: 16px; font-weight: 600; }
+.tabs { display: flex; gap: 0; margin-bottom: 16px; }
+.tab { flex: 1; padding: 8px; text-align: center; font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid #333; background: #1b1f26; color: #848e9c; }
+.tab:first-child { border-radius: 4px 0 0 4px; }
+.tab:last-child { border-radius: 0 4px 4px 0; }
+.tab.active-buy { background: rgba(14,203,129,0.15); color: #0ecb81; border-color: #0ecb81; }
+.tab.active-sell { background: rgba(246,70,93,0.15); color: #f6465d; border-color: #f6465d; }
+.form-group { margin-bottom: 10px; }
+.form-group label { display: block; font-size: 11px; color: #848e9c; margin-bottom: 4px; }
+.form-group input, .form-group select {
+  width: 100%; padding: 8px 10px; background: #1b1f26; border: 1px solid #2b3139;
+  color: #eaecef; border-radius: 4px; font-size: 13px; font-family: inherit; outline: none; }
+.form-group input:focus, .form-group select:focus { border-color: #f0b90b; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn { width: 100%; padding: 12px; border: none; border-radius: 4px; cursor: pointer;
+  font-family: inherit; font-weight: 700; font-size: 14px; margin-top: 8px; transition: opacity 0.2s; }
 .btn:hover { opacity: 0.85; }
-.status { text-align: center; font-size: 11px; margin-top: 8px; color: #888; }
-.status.connected { color: #2ed573; }
-.status.disconnected { color: #ff4757; }
-.msg { font-size: 12px; margin-top: 8px; padding: 6px; border-radius: 4px; text-align: center; }
-.msg.ok { background: #1e4620; color: #2ed573; }
-.msg.err { background: #4a1c1c; color: #ff4757; }
-#trades-body tr { animation: fadeIn 0.3s; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.btn-buy { background: #0ecb81; color: #fff; }
+.btn-sell { background: #f6465d; color: #fff; }
+.msg { font-size: 12px; margin-top: 10px; padding: 8px; border-radius: 4px; text-align: center; }
+.msg.ok { background: rgba(14,203,129,0.15); color: #0ecb81; }
+.msg.err { background: rgba(246,70,93,0.15); color: #f6465d; }
+.balance-info { margin-top: auto; padding-top: 16px; border-top: 1px solid #1e2329; }
+.balance-info .bal-title { font-size: 11px; color: #555; margin-bottom: 6px; }
+.balance-info .bal-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+.balance-info .bal-val { color: #f0b90b; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 </style>
 </head>
 <body>
 
-<h1>GoMatch Exchange</h1>
+<!-- 顶栏 -->
+<div class="header">
+  <h1>GoMatch</h1>
+  <span class="pair">ETH / USD</span>
+  <span class="last-price" id="last-price">--</span>
+  <span class="ws-dot off" id="ws-dot"></span>
+</div>
 
-<div class="container">
+<!-- 主体 -->
+<div class="main">
   <!-- 盘口 -->
-  <div class="panel">
-    <h2>Order Book</h2>
-    <table>
-      <thead><tr><th>Price</th><th>Qty</th><th>Side</th></tr></thead>
-      <tbody id="asks-body"></tbody>
-      <tbody><tr><td colspan="3" style="text-align:center;color:#555;padding:4px;">───</td></tr></tbody>
-      <tbody id="bids-body"></tbody>
-    </table>
+  <div class="orderbook">
+    <div class="orderbook-header"><span>Price</span><span>Qty</span><span>Total</span></div>
+    <div class="orderbook-asks" id="asks-container"></div>
+    <div class="spread-bar">
+      Spread: <span class="spread-price" id="spread-val">--</span>
+    </div>
+    <div class="orderbook-bids" id="bids-container"></div>
   </div>
 
   <!-- 成交记录 -->
-  <div class="panel">
-    <h2>Recent Trades</h2>
-    <table>
-      <thead><tr><th>Price</th><th>Qty</th><th>Time</th></tr></thead>
-      <tbody id="trades-body"></tbody>
-    </table>
+  <div class="trades">
+    <div class="trades-title">Recent Trades</div>
+    <div class="trades-header"><span>Price</span><span>Qty</span><span>Time</span></div>
+    <div class="trades-list" id="trades-list"></div>
   </div>
 
   <!-- 下单 -->
-  <div class="panel">
+  <div class="order-panel">
     <h2>Place Order</h2>
-    <div class="form-group">
-      <label>Order ID</label>
-      <input type="number" id="order-id" value="1">
+    <div class="tabs">
+      <div class="tab active-buy" id="tab-buy" onclick="selectSide('buy')">Buy</div>
+      <div class="tab" id="tab-sell" onclick="selectSide('sell')">Sell</div>
     </div>
-    <div class="form-group">
-      <label>Owner ID</label>
-      <input type="number" id="owner-id" value="1">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Order ID</label>
+        <input type="number" id="order-id" value="1">
+      </div>
+      <div class="form-group">
+        <label>Owner ID</label>
+        <input type="number" id="owner-id" value="1">
+      </div>
     </div>
     <div class="form-group">
       <label>Type</label>
@@ -84,99 +150,128 @@ td { font-size: 13px; text-align: right; padding: 4px 8px; }
       </select>
     </div>
     <div class="form-group">
-      <label>Price</label>
+      <label>Price (USD)</label>
       <input type="number" id="order-price" value="100">
     </div>
     <div class="form-group">
-      <label>Quantity</label>
+      <label>Quantity (ETH)</label>
       <input type="number" id="order-qty" value="10">
     </div>
-    <button class="btn btn-buy" onclick="placeOrder('buy')">Buy</button>
-    <button class="btn btn-sell" onclick="placeOrder('sell')">Sell</button>
+    <button class="btn btn-buy" id="submit-btn" onclick="submitOrder()">Buy ETH</button>
     <div id="order-msg"></div>
-    <div id="ws-status" class="status disconnected">disconnected</div>
   </div>
 </div>
 
 <script>
 const API = window.location.origin;
 const WS_URL = `ws://${window.location.host}/ws`;
+let currentSide = 'buy';
+let lastTradePrice = 0;
+
+// --- Side 选择 ---
+function selectSide(side) {
+  currentSide = side;
+  document.getElementById('tab-buy').className = side === 'buy' ? 'tab active-buy' : 'tab';
+  document.getElementById('tab-sell').className = side === 'sell' ? 'tab active-sell' : 'tab';
+  const btn = document.getElementById('submit-btn');
+  btn.className = side === 'buy' ? 'btn btn-buy' : 'btn btn-sell';
+  btn.textContent = side === 'buy' ? 'Buy ETH' : 'Sell ETH';
+}
 
 // --- WebSocket ---
 let ws;
 function connectWS() {
   ws = new WebSocket(WS_URL);
-  document.getElementById('ws-status').textContent = 'connecting...';
-  document.getElementById('ws-status').className = 'status';
+  document.getElementById('ws-dot').className = 'ws-dot';
 
   ws.onopen = () => {
-    document.getElementById('ws-status').textContent = 'connected';
-    document.getElementById('ws-status').className = 'status connected';
-    fetchBook(); // 连上后先拉一次盘口
+    document.getElementById('ws-dot').className = 'ws-dot on';
+    fetchBook();
   };
 
   ws.onmessage = (msg) => {
     const event = JSON.parse(msg.data);
-    if (event.Type === 'trade') {
-      addTrade(event.Data);
-    }
-    if (event.Type === 'book_update') {
-      renderBook(event.Data);
-    }
+    if (event.Type === 'trade') addTrade(event.Data);
+    if (event.Type === 'book_update') renderBook(event.Data);
   };
 
   ws.onclose = () => {
-    document.getElementById('ws-status').textContent = 'disconnected, retrying...';
-    document.getElementById('ws-status').className = 'status disconnected';
+    document.getElementById('ws-dot').className = 'ws-dot off';
     setTimeout(connectWS, 2000);
   };
 }
 
-// --- 盘口渲染 ---
+// --- 盘口 ---
 function renderBook(snapshot) {
-  const asksBody = document.getElementById('asks-body');
-  const bidsBody = document.getElementById('bids-body');
-
-  // asks: 按价格降序(高的在上)
   const asks = (snapshot.asks || []).sort((a, b) => b.price - a.price);
-  asksBody.innerHTML = asks.map(lvl =>
-    `<tr class="ask"><td>${lvl.price}</td><td>${lvl.total_qty}</td><td>ASK</td></tr>`
-  ).join('');
-
-  // bids: 按价格降序(高的在上)
   const bids = (snapshot.bids || []).sort((a, b) => b.price - a.price);
-  bidsBody.innerHTML = bids.map(lvl =>
-    `<tr class="bid"><td>${lvl.price}</td><td>${lvl.total_qty}</td><td>BID</td></tr>`
+
+  const maxQty = Math.max(
+    ...asks.map(l => l.total_qty), ...bids.map(l => l.total_qty), 1
+  );
+
+  let cumAsk = 0;
+  const asksWithTotal = asks.map(l => { cumAsk += l.total_qty; return { ...l, cumTotal: cumAsk }; });
+
+  let cumBid = 0;
+  const bidsWithTotal = bids.map(l => { cumBid += l.total_qty; return { ...l, cumTotal: cumBid }; });
+
+  const maxTotal = Math.max(cumAsk, cumBid, 1);
+
+  document.getElementById('asks-container').innerHTML = asksWithTotal.map(l =>
+    `<div class="ob-row ask">
+      <div class="depth-bar" style="width:${(l.cumTotal / maxTotal * 100).toFixed(1)}%"></div>
+      <span class="price">${l.price}</span><span class="qty">${l.total_qty}</span><span class="total">${l.cumTotal}</span>
+    </div>`
   ).join('');
-}
 
-function fetchBook() {
-  fetch(API + '/book')
-    .then(r => r.json())
-    .then(renderBook)
-    .catch(() => {});
-}
+  document.getElementById('bids-container').innerHTML = bidsWithTotal.map(l =>
+    `<div class="ob-row bid">
+      <div class="depth-bar" style="width:${(l.cumTotal / maxTotal * 100).toFixed(1)}%"></div>
+      <span class="price">${l.price}</span><span class="qty">${l.total_qty}</span><span class="total">${l.cumTotal}</span>
+    </div>`
+  ).join('');
 
-// --- 成交记录 ---
-const MAX_TRADES = 20;
-function addTrade(trade) {
-  const tbody = document.getElementById('trades-body');
-  const time = new Date().toLocaleTimeString();
-  const row = document.createElement('tr');
-  row.className = 'trade-row';
-  row.innerHTML = `<td>${trade.Price}</td><td>${trade.Qty}</td><td style="color:#888">${time}</td>`;
-  tbody.insertBefore(row, tbody.firstChild);
-  while (tbody.children.length > MAX_TRADES) {
-    tbody.removeChild(tbody.lastChild);
+  // 价差
+  const bestAsk = asks.length > 0 ? asks[asks.length - 1].price : null;
+  const bestBid = bids.length > 0 ? bids[0].price : null;
+  if (bestAsk !== null && bestBid !== null) {
+    document.getElementById('spread-val').textContent = bestAsk - bestBid;
+  } else {
+    document.getElementById('spread-val').textContent = '--';
   }
 }
 
+function fetchBook() {
+  fetch(API + '/book').then(r => r.json()).then(renderBook).catch(() => {});
+}
+
+// --- 成交 ---
+const MAX_TRADES = 30;
+function addTrade(trade) {
+  const list = document.getElementById('trades-list');
+  const time = new Date().toLocaleTimeString();
+  const dir = trade.Price >= lastTradePrice ? 'buy' : 'sell';
+  lastTradePrice = trade.Price;
+
+  const row = document.createElement('div');
+  row.className = 'trade-row';
+  row.innerHTML = `<span class="t-price ${dir}">${trade.Price}</span><span class="t-qty">${trade.Qty}</span><span class="t-time">${time}</span>`;
+  list.insertBefore(row, list.firstChild);
+  while (list.children.length > MAX_TRADES) list.removeChild(list.lastChild);
+
+  // 更新最新价
+  const el = document.getElementById('last-price');
+  el.textContent = trade.Price;
+  el.className = `last-price ${dir === 'buy' ? 'up' : 'down'}`;
+}
+
 // --- 下单 ---
-function placeOrder(side) {
+function submitOrder() {
   const order = {
     id: parseInt(document.getElementById('order-id').value),
     owner_id: parseInt(document.getElementById('owner-id').value),
-    side: side,
+    side: currentSide,
     type: document.getElementById('order-type').value,
     price: parseInt(document.getElementById('order-price').value),
     qty: parseInt(document.getElementById('order-qty').value),
@@ -193,10 +288,7 @@ function placeOrder(side) {
     if (status === 201) {
       const trades = data.trades || [];
       msgEl.className = 'msg ok';
-      msgEl.textContent = trades.length > 0
-        ? `Filled ${trades.length} trade(s)`
-        : 'Order placed';
-      // 自增 ID
+      msgEl.textContent = trades.length > 0 ? `Filled ${trades.length} trade(s)` : 'Order placed';
       document.getElementById('order-id').value = order.id + 1;
       fetchBook();
     } else {
