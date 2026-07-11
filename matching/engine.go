@@ -6,9 +6,9 @@ import "context"
 type OpType int
 
 const (
-	OpPlaceOrder   OpType = iota // 下单(Submit)
-	OpCancelOrder                // 撤单
-	OpGetSnapshot                // 获取快照
+	OpPlaceOrder  OpType = iota // 下单(Submit)
+	OpCancelOrder               // 撤单
+	OpGetSnapshot               // 获取快照
 )
 
 // Command 是发给引擎的一条命令。
@@ -31,10 +31,10 @@ type Result struct {
 type Engine struct {
 	book   *Book
 	cmds   chan Command
-	ledger *Ledger    // 可选, nil 表示不做余额检查
-	bus    *EventBus  // 可选, nil 表示不发事件
-	base   string     // 如 "ETH"
-	quote  string     // 如 "USD"
+	ledger *Ledger   // 可选, nil 表示不做余额检查
+	bus    *EventBus // 可选, nil 表示不发事件
+	base   string    // 如 "ETH"
+	quote  string    // 如 "USD"
 	symbol Symbol
 }
 
@@ -109,7 +109,6 @@ func (e *Engine) Place(ctx context.Context, order Order) ([]Trade, error) {
 	}
 }
 
-// Cancel 撤销一笔订单, 同步等待结果。
 // Cancel 撤销一笔订单, 同步等待结果。
 func (e *Engine) Cancel(ctx context.Context, orderID int64) error {
 	reply := make(chan Result, 1)

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoMatch</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 20px; }
+h1 { text-align: center; color: #00d4ff; margin-bottom: 20px; font-size: 24px; }
+.container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; }
+.panel { background: #16213e; border-radius: 8px; padding: 16px; }
+.panel h2 { font-size: 14px; color: #888; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 11px; color: #666; text-align: right; padding: 4px 8px; border-bottom: 1px solid #333; }
+td { font-size: 13px; text-align: right; padding: 4px 8px; }
+.ask { color: #ff4757; }
+.bid { color: #2ed573; }
+.trade-row { border-bottom: 1px solid #222; }
+.trade-buy { color: #2ed573; }
+.trade-sell { color: #ff4757; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
+.form-group input, .form-group select {
+  width: 100%; padding: 8px; background: #0f3460; border: 1px solid #333;
+  color: #e0e0e0; border-radius: 4px; font-family: inherit;
+}
+.btn { width: 100%; padding: 10px; border: none; border-radius: 4px; cursor: pointer;
+  font-family: inherit; font-weight: bold; font-size: 14px; margin-top: 4px; }
+.btn-buy { background: #2ed573; color: #000; }
+.btn-sell { background: #ff4757; color: #fff; }
+.btn:hover { opacity: 0.85; }
+.status { text-align: center; font-size: 11px; margin-top: 8px; color: #888; }
+.status.connected { color: #2ed573; }
+.status.disconnected { color: #ff4757; }
+.msg { font-size: 12px; margin-top: 8px; padding: 6px; border-radius: 4px; text-align: center; }
+.msg.ok { background: #1e4620; color: #2ed573; }
+.msg.err { background: #4a1c1c; color: #ff4757; }
+#trades-body tr { animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<h1>GoMatch Exchange</h1>
+
+<div class="container">
+  <!-- 盘口 -->
+  <div class="panel">
+    <h2>Order Book</h2>
+    <table>
+      <thead><tr><th>Price</th><th>Qty</th><th>Side</th></tr></thead>
+      <tbody id="asks-body"></tbody>
+      <tbody><tr><td colspan="3" style="text-align:center;color:#555;padding:4px;">───</td></tr></tbody>
+      <tbody id="bids-body"></tbody>
+    </table>
+  </div>
+
+  <!-- 成交记录 -->
+  <div class="panel">
+    <h2>Recent Trades</h2>
+    <table>
+      <thead><tr><th>Price</th><th>Qty</th><th>Time</th></tr></thead>
+      <tbody id="trades-body"></tbody>
+    </table>
+  </div>
+
+  <!-- 下单 -->
+  <div class="panel">
+    <h2>Place Order</h2>
+    <div class="form-group">
+      <label>Order ID</label>
+      <input type="number" id="order-id" value="1">
+    </div>
+    <div class="form-group">
+      <label>Owner ID</label>
+      <input type="number" id="owner-id" value="1">
+    </div>
+    <div class="form-group">
+      <label>Type</label>
+      <select id="order-type">
+        <option value="limit">Limit</option>
+        <option value="market">Market</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Price</label>
+      <input type="number" id="order-price" value="100">
+    </div>
+    <div class="form-group">
+      <label>Quantity</label>
+      <input type="number" id="order-qty" value="10">
+    </div>
+    <button class="btn btn-buy" onclick="placeOrder('buy')">Buy</button>
+    <button class="btn btn-sell" onclick="placeOrder('sell')">Sell</button>
+    <div id="order-msg"></div>
+    <div id="ws-status" class="status disconnected">disconnected</div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+const WS_URL = `ws://${window.location.host}/ws`;
+
+// --- WebSocket ---
+let ws;
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+  document.getElementById('ws-status').textContent = 'connecting...';
+  document.getElementById('ws-status').className = 'status';
+
+  ws.onopen = () => {
+    document.getElementById('ws-status').textContent = 'connected';
+    document.getElementById('ws-status').className = 'status connected';
+    fetchBook(); // 连上后先拉一次盘口
+  };
+
+  ws.onmessage = (msg) => {
+    const event = JSON.parse(msg.data);
+    if (event.Type === 'trade') {
+      addTrade(event.Data);
+    }
+    if (event.Type === 'book_update') {
+      renderBook(event.Data);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-status').textContent = 'disconnected, retrying...';
+    document.getElementById('ws-status').className = 'status disconnected';
+    setTimeout(connectWS, 2000);
+  };
+}
+
+// --- 盘口渲染 ---
+function renderBook(snapshot) {
+  const asksBody = document.getElementById('asks-body');
+  const bidsBody = document.getElementById('bids-body');
+
+  // asks: 按价格降序(高的在上)
+  const asks = (snapshot.asks || []).sort((a, b) => b.price - a.price);
+  asksBody.innerHTML = asks.map(lvl =>
+    `<tr class="ask"><td>${lvl.price}</td><td>${lvl.total_qty}</td><td>ASK</td></tr>`
+  ).join('');
+
+  // bids: 按价格降序(高的在上)
+  const bids = (snapshot.bids || []).sort((a, b) => b.price - a.price);
+  bidsBody.innerHTML = bids.map(lvl =>
+    `<tr class="bid"><td>${lvl.price}</td><td>${lvl.total_qty}</td><td>BID</td></tr>`
+  ).join('');
+}
+
+function fetchBook() {
+  fetch(API + '/book')
+    .then(r => r.json())
+    .then(renderBook)
+    .catch(() => {});
+}
+
+// --- 成交记录 ---
+const MAX_TRADES = 20;
+function addTrade(trade) {
+  const tbody = document.getElementById('trades-body');
+  const time = new Date().toLocaleTimeString();
+  const row = document.createElement('tr');
+  row.className = 'trade-row';
+  row.innerHTML = `<td>${trade.Price}</td><td>${trade.Qty}</td><td style="color:#888">${time}</td>`;
+  tbody.insertBefore(row, tbody.firstChild);
+  while (tbody.children.length > MAX_TRADES) {
+    tbody.removeChild(tbody.lastChild);
+  }
+}
+
+// --- 下单 ---
+function placeOrder(side) {
+  const order = {
+    id: parseInt(document.getElementById('order-id').value),
+    owner_id: parseInt(document.getElementById('owner-id').value),
+    side: side,
+    type: document.getElementById('order-type').value,
+    price: parseInt(document.getElementById('order-price').value),
+    qty: parseInt(document.getElementById('order-qty').value),
+  };
+
+  fetch(API + '/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(order),
+  })
+  .then(r => r.json().then(data => ({ status: r.status, data })))
+  .then(({ status, data }) => {
+    const msgEl = document.getElementById('order-msg');
+    if (status === 201) {
+      const trades = data.trades || [];
+      msgEl.className = 'msg ok';
+      msgEl.textContent = trades.length > 0
+        ? `Filled ${trades.length} trade(s)`
+        : 'Order placed';
+      // 自增 ID
+      document.getElementById('order-id').value = order.id + 1;
+      fetchBook();
+    } else {
+      msgEl.className = 'msg err';
+      msgEl.textContent = data.error || 'Error';
+    }
+    setTimeout(() => { msgEl.textContent = ''; msgEl.className = ''; }, 3000);
+  })
+  .catch(err => {
+    const msgEl = document.getElementById('order-msg');
+    msgEl.className = 'msg err';
+    msgEl.textContent = err.message;
+  });
+}
+
+// 启动
+connectWS();
+fetchBook();
+</script>
+</body>
+</html>
