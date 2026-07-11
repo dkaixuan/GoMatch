@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"exchange/matching"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -39,8 +40,10 @@ func main() {
 
 	// 5. 设置路由(带 WebSocket)
 	router := matching.SetupRouterWithBus(engine, bus)
-	router.StaticFile("/", "./static/index.html")
 	router.Static("/static", "./static")
+	router.NoRoute(func(c *gin.Context) {
+		c.File("./static/index.html")
+	})
 
 	// 6. 创建 HTTP 服务器
 	srv := &http.Server{
