@@ -1,9 +1,12 @@
-package matching
+package engine
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"exchange/eventbus"
+	"exchange/matching"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -29,7 +32,7 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 // SetupRouterWithBus 创建带 WebSocket 推送的 Gin 路由。
-func SetupRouterWithBus(e *Engine, bus *EventBus) *gin.Engine {
+func SetupRouterWithBus(e *Engine, bus *eventbus.EventBus) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
@@ -37,7 +40,7 @@ func SetupRouterWithBus(e *Engine, bus *EventBus) *gin.Engine {
 	r.POST("/orders", func(c *gin.Context) {
 		var req PlaceOrderRequest
 		c.ShouldBindJSON(&req)
-		order := Order{
+		order := matching.Order{
 			ID:      req.ID,
 			OwnerID: req.OwnerID,
 			Side:    parseSide(req.Side),
@@ -123,19 +126,19 @@ func SetupRouterWithBus(e *Engine, bus *EventBus) *gin.Engine {
 }
 
 // parseSide 把字符串转成 Side 枚举。
-func parseSide(s string) Side {
+func parseSide(s string) matching.Side {
 	if s == "sell" {
-		return Sell
+		return matching.Sell
 	}
-	return Buy
+	return matching.Buy
 }
 
 // parseOrderType 把字符串转成 OrderType 枚举。
-func parseOrderType(s string) OrderType {
+func parseOrderType(s string) matching.OrderType {
 	if s == "market" {
-		return Market
+		return matching.Market
 	}
-	return Limit
+	return matching.Limit
 }
 
 // parseID 从 URL 参数解析 int64 ID。

@@ -1,12 +1,16 @@
-package matching
+package eventbus
 
-import "sync"
+import (
+	"sync"
+
+	"exchange/matching"
+)
 
 // Event 是事件总线上传递的事件。
 type Event struct {
-	Type   string      // "trade" 或 "book_update"
-	Symbol Symbol      // 哪个币对
-	Data   interface{} // 具体数据(Trade 或 BookSnapshot)
+	Type   string         // "trade" 或 "book_update"
+	Symbol matching.Symbol // 哪个币对
+	Data   interface{}    // 具体数据(Trade 或 BookSnapshot)
 }
 
 // EventBus 是一个简单的发布/订阅事件总线。

@@ -1,6 +1,12 @@
-package matching
+package engine
 
-import "context"
+import (
+	"context"
+
+	"exchange/eventbus"
+	"exchange/ledger"
+	"exchange/matching"
+)
 
 // OpType 表示命令类型
 type OpType int
@@ -15,51 +21,51 @@ const (
 // Reply channel 用于接收引擎处理完后的结果。
 type Command struct {
 	Op      OpType
-	Order   Order // OpPlaceOrder 用
-	OrderID int64 // OpCancelOrder 用
+	Order   matching.Order // OpPlaceOrder 用
+	OrderID int64          // OpCancelOrder 用
 	Reply   chan Result
 }
 
 // Result 是引擎返回的处理结果。
 type Result struct {
-	Trades   []Trade
-	Snapshot BookSnapshot
+	Trades   []matching.Trade
+	Snapshot matching.BookSnapshot
 	Error    error
 }
 
 // Engine 用一个 goroutine 独占 Book, 通过 channel 接收命令。
 type Engine struct {
-	book   *Book
+	book   *matching.Book
 	cmds   chan Command
-	ledger *Ledger   // 可选, nil 表示不做余额检查
-	bus    *EventBus // 可选, nil 表示不发事件
-	base   string    // 如 "ETH"
-	quote  string    // 如 "USD"
-	symbol Symbol
+	ledger *ledger.Ledger      // 可选, nil 表示不做余额检查
+	bus    *eventbus.EventBus  // 可选, nil 表示不发事件
+	base   string              // 如 "ETH"
+	quote  string              // 如 "USD"
+	symbol matching.Symbol
 }
 
 // NewEngine 创建引擎(无 Ledger, 向后兼容)。
 func NewEngine() *Engine {
 	return &Engine{
-		book: NewBook(),
+		book: matching.NewBook(),
 		cmds: make(chan Command, 64),
 	}
 }
 
 // NewEngineWithLedger 创建带资金账户的引擎。
-func NewEngineWithLedger(ledger *Ledger, base, quote string) *Engine {
+func NewEngineWithLedger(l *ledger.Ledger, base, quote string) *Engine {
 	return &Engine{
-		book:   NewBook(),
+		book:   matching.NewBook(),
 		cmds:   make(chan Command, 64),
-		ledger: ledger,
+		ledger: l,
 		base:   base,
 		quote:  quote,
-		symbol: Symbol{Base: base, Quote: quote},
+		symbol: matching.Symbol{Base: base, Quote: quote},
 	}
 }
 
 // SetEventBus 设置事件总线(可选)。
-func (e *Engine) SetEventBus(bus *EventBus) {
+func (e *Engine) SetEventBus(bus *eventbus.EventBus) {
 	e.bus = bus
 }
 
@@ -92,7 +98,7 @@ func (e *Engine) Run(ctx context.Context) {
 // 如果 ctx 被取消, 立刻返回 ctx.Err(), 不卡死。
 //
 // Place 提交一笔订单, 同步等待结果。
-func (e *Engine) Place(ctx context.Context, order Order) ([]Trade, error) {
+func (e *Engine) Place(ctx context.Context, order matching.Order) ([]matching.Trade, error) {
 	reply := make(chan Result, 1)
 
 	select {
@@ -126,16 +132,16 @@ func (e *Engine) Cancel(ctx context.Context, orderID int64) error {
 }
 
 // GetSnapshot 获取订单簿快照, 同步等待结果。
-func (e *Engine) GetSnapshot(ctx context.Context) (BookSnapshot, error) {
+func (e *Engine) GetSnapshot(ctx context.Context) (matching.BookSnapshot, error) {
 	reply := make(chan Result, 1)
 	select {
 	case <-ctx.Done():
-		return BookSnapshot{}, ctx.Err()
+		return matching.BookSnapshot{}, ctx.Err()
 	case e.cmds <- Command{Op: OpGetSnapshot, Reply: reply}:
 	}
 	select {
 	case <-ctx.Done():
-		return BookSnapshot{}, ctx.Err()
+		return matching.BookSnapshot{}, ctx.Err()
 	case res := <-reply:
 		return res.Snapshot, res.Error
 	}
@@ -146,10 +152,10 @@ func (e *Engine) handlePlace(cmd Command) {
 	order := cmd.Order
 
 	// 1. 冻结资金(如果有 Ledger)
-	if e.ledger != nil && order.Type == Limit {
+	if e.ledger != nil && order.Type == matching.Limit {
 		var freezeAsset string
 		var freezeAmount int64
-		if order.Side == Buy {
+		if order.Side == matching.Buy {
 			freezeAsset = e.quote
 			freezeAmount = order.Price * order.Qty
 		} else {
@@ -165,8 +171,8 @@ func (e *Engine) handlePlace(cmd Command) {
 	// 2. 撮合
 	trades, err := e.book.Submit(order)
 	if err != nil {
-		if e.ledger != nil && order.Type == Limit {
-			if order.Side == Buy {
+		if e.ledger != nil && order.Type == matching.Limit {
+			if order.Side == matching.Buy {
 				e.ledger.Unfreeze(order.OwnerID, e.quote, order.Price*order.Qty)
 			} else {
 				e.ledger.Unfreeze(order.OwnerID, e.base, order.Qty)
@@ -184,7 +190,7 @@ func (e *Engine) handlePlace(cmd Command) {
 		}
 
 		// 4. 买单价格改善退款(成交价 < 限价 → 多冻了)
-		if order.Side == Buy && order.Type == Limit {
+		if order.Side == matching.Buy && order.Type == matching.Limit {
 			for _, trade := range trades {
 				improvement := (order.Price - trade.Price) * trade.Qty
 				if improvement > 0 {
@@ -197,10 +203,10 @@ func (e *Engine) handlePlace(cmd Command) {
 	// 5. 发布事件
 	if e.bus != nil {
 		for _, trade := range trades {
-			e.bus.Publish(Event{Type: "trade", Symbol: e.symbol, Data: trade})
+			e.bus.Publish(eventbus.Event{Type: "trade", Symbol: e.symbol, Data: trade})
 		}
 		if len(trades) > 0 {
-			e.bus.Publish(Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
+			e.bus.Publish(eventbus.Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
 		}
 	}
 
@@ -218,7 +224,7 @@ func (e *Engine) handleCancel(cmd Command) {
 	}
 
 	if e.ledger != nil && exists {
-		if order.Side == Buy {
+		if order.Side == matching.Buy {
 			e.ledger.Unfreeze(order.OwnerID, e.quote, order.Price*order.Qty)
 		} else {
 			e.ledger.Unfreeze(order.OwnerID, e.base, order.Qty)
@@ -227,7 +233,7 @@ func (e *Engine) handleCancel(cmd Command) {
 
 	// 发布盘口变化事件
 	if e.bus != nil {
-		e.bus.Publish(Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
+		e.bus.Publish(eventbus.Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
 	}
 
 	cmd.Reply <- Result{}

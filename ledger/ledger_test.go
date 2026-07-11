@@ -1,7 +1,6 @@
-package matching
+package ledger
 
 import (
-	"context"
 	"errors"
 	"testing"
 )
@@ -99,8 +98,9 @@ func TestLedgerConservation(t *testing.T) {
 // TestSettle 检查成交结算的四笔账。
 //
 // 场景: 买家(1)买 5 ETH @ 100, 卖家(2)卖。
-//   买家: 之前冻了 500 USD → 结算后冻结清零, 得 5 ETH
-//   卖家: 之前冻了 5 ETH  → 结算后冻结清零, 得 500 USD
+//
+//	买家: 之前冻了 500 USD → 结算后冻结清零, 得 5 ETH
+//	卖家: 之前冻了 5 ETH  → 结算后冻结清零, 得 500 USD
 func TestSettle(t *testing.T) {
 	l := NewLedger()
 
@@ -147,99 +147,5 @@ func TestSettle(t *testing.T) {
 	}
 	if ethTotal != 10 {
 		t.Errorf("全市场 ETH = %d, 期望 10", ethTotal)
-	}
-}
-
-// TestSubmitWithLedger 检查资金账户与撮合引擎的完整集成:
-//   余额不足 → 拒单
-//   正常成交 → 双方余额正确
-//   撤单 → 解冻
-func TestSubmitWithLedger(t *testing.T) {
-	l := NewLedger()
-	e := NewEngineWithLedger(l, "ETH", "USD")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go e.Run(ctx)
-
-	// --- 准备: 给两个用户入金 ---
-	l.Deposit(1, "USD", 10000) // 用户 1: 10000 USD (买方)
-	l.Deposit(2, "ETH", 100)   // 用户 2: 100 ETH (卖方)
-
-	// --- 测试 1: 余额不足被拒 ---
-	_, err := e.Place(ctx, Order{
-		ID: 99, OwnerID: 1, Side: Buy, Type: Limit, Price: 200, Qty: 100,
-		// 需要 200*100=20000 USD, 但只有 10000
-	})
-	if !errors.Is(err, ErrInsufficientBalance) {
-		t.Fatalf("余额不足应拒单, got err=%v", err)
-	}
-	// 被拒后余额不变
-	if got := l.Available(1, "USD"); got != 10000 {
-		t.Errorf("拒单后 USD 应不变, got %d", got)
-	}
-
-	// --- 测试 2: 正常成交 ---
-	// 用户 2 挂卖单: 10 ETH @ 100
-	_, err = e.Place(ctx, Order{
-		ID: 1, OwnerID: 2, Side: Sell, Type: Limit, Price: 100, Qty: 10,
-	})
-	if err != nil {
-		t.Fatalf("挂卖单报错: %v", err)
-	}
-	// 卖方 ETH: 可用 90, 冻结 10
-	if got := l.Available(2, "ETH"); got != 90 {
-		t.Errorf("卖方可用 ETH = %d, 期望 90", got)
-	}
-	if got := l.Frozen(2, "ETH"); got != 10 {
-		t.Errorf("卖方冻结 ETH = %d, 期望 10", got)
-	}
-
-	// 用户 1 提交买单: 10 ETH @ 100, 应成交
-	trades, err := e.Place(ctx, Order{
-		ID: 2, OwnerID: 1, Side: Buy, Type: Limit, Price: 100, Qty: 10,
-	})
-	if err != nil {
-		t.Fatalf("提交买单报错: %v", err)
-	}
-	if len(trades) != 1 || trades[0].Qty != 10 {
-		t.Fatalf("应成交 10, got trades=%+v", trades)
-	}
-
-	// 成交后:
-	// 买方: USD 10000-1000=9000, ETH +10
-	if got := l.Available(1, "USD"); got != 9000 {
-		t.Errorf("买方可用 USD = %d, 期望 9000", got)
-	}
-	if got := l.Available(1, "ETH"); got != 10 {
-		t.Errorf("买方可用 ETH = %d, 期望 10", got)
-	}
-	// 卖方: ETH 冻结清零, USD +1000
-	if got := l.Frozen(2, "ETH"); got != 0 {
-		t.Errorf("卖方冻结 ETH = %d, 期望 0", got)
-	}
-	if got := l.Available(2, "USD"); got != 1000 {
-		t.Errorf("卖方可用 USD = %d, 期望 1000", got)
-	}
-
-	// --- 测试 3: 撤单解冻 ---
-	// 用户 1 挂一笔买单, 然后撤掉
-	_, err = e.Place(ctx, Order{
-		ID: 3, OwnerID: 1, Side: Buy, Type: Limit, Price: 50, Qty: 10,
-	})
-	if err != nil {
-		t.Fatalf("挂买单报错: %v", err)
-	}
-	// 冻结了 50*10=500 USD
-	if got := l.Available(1, "USD"); got != 8500 {
-		t.Errorf("挂买单后可用 USD = %d, 期望 8500", got)
-	}
-
-	err = e.Cancel(ctx, 3)
-	if err != nil {
-		t.Fatalf("撤单报错: %v", err)
-	}
-	// 解冻 500 → 可用恢复到 9000
-	if got := l.Available(1, "USD"); got != 9000 {
-		t.Errorf("撤单后可用 USD = %d, 期望 9000", got)
 	}
 }

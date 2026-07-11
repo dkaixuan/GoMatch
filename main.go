@@ -9,24 +9,26 @@ import (
 	"syscall"
 	"time"
 
-	"exchange/matching"
+	"exchange/engine"
+	"exchange/eventbus"
+	"exchange/ledger"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	// 1. 创建共享组件
-	ledger := matching.NewLedger()
-	bus := matching.NewEventBus()
+	l := ledger.NewLedger()
+	bus := eventbus.NewEventBus()
 
 	// 2. 创建引擎(ETH/USD)
-	engine := matching.NewEngineWithLedger(ledger, "ETH", "USD")
-	engine.SetEventBus(bus)
+	e := engine.NewEngineWithLedger(l, "ETH", "USD")
+	e.SetEventBus(bus)
 
 	// 3. 给演示用户入金
-	ledger.Deposit(1, "USD", 1000000)
-	ledger.Deposit(1, "ETH", 1000)
-	ledger.Deposit(2, "USD", 1000000)
-	ledger.Deposit(2, "ETH", 1000)
+	l.Deposit(1, "USD", 1000000)
+	l.Deposit(1, "ETH", 1000)
+	l.Deposit(2, "USD", 1000000)
+	l.Deposit(2, "ETH", 1000)
 
 	// 4. 用一个可取消的 context 控制引擎生命周期
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,12 +36,12 @@ func main() {
 
 	done := make(chan struct{})
 	go func() {
-		engine.Run(ctx)
+		e.Run(ctx)
 		close(done)
 	}()
 
 	// 5. 设置路由(带 WebSocket)
-	router := matching.SetupRouterWithBus(engine, bus)
+	router := engine.SetupRouterWithBus(e, bus)
 	router.Static("/static", "./static")
 	router.NoRoute(func(c *gin.Context) {
 		c.File("./static/index.html")
