@@ -14,6 +14,7 @@ import (
 	"exchange/eventbus"
 	"exchange/ledger"
 	"exchange/matching"
+	"exchange/store"
 
 	"github.com/gorilla/websocket"
 )
@@ -715,5 +716,40 @@ func TestSubmitWithLedger(t *testing.T) {
 	// 解冻 500 → 可用恢复到 9000
 	if got := l.Available(1, "USD"); got != 9000 {
 		t.Errorf("撤单后可用 USD = %d, 期望 9000", got)
+	}
+}
+
+// TestTradeStoreIntegration 检查成交后自动存入 TradeStore。
+func TestTradeStoreIntegration(t *testing.T) {
+	ts := store.NewMemoryStore()
+	l := ledger.NewLedger()
+	e := NewEngineWithLedger(l, "ETH", "USD")
+	e.SetTradeStore(ts)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.Run(ctx)
+
+	// 入金
+	l.Deposit(1, "USD", 100000)
+	l.Deposit(2, "ETH", 100)
+
+	// 挂卖单 + 买单成交
+	e.Place(ctx, matching.Order{ID: 1, OwnerID: 2, Side: matching.Sell, Type: matching.Limit, Price: 100, Qty: 10})
+	e.Place(ctx, matching.Order{ID: 2, OwnerID: 1, Side: matching.Buy, Type: matching.Limit, Price: 100, Qty: 10})
+
+	// 等一下让 Engine 处理完
+	time.Sleep(50 * time.Millisecond)
+
+	// 查询成交记录
+	trades, err := ts.ListTrades("ETH/USD", 10)
+	if err != nil {
+		t.Fatalf("ListTrades 报错: %v", err)
+	}
+	if len(trades) != 1 {
+		t.Fatalf("trades = %d, 期望 1", len(trades))
+	}
+	if trades[0].Price != 100 || trades[0].Qty != 10 {
+		t.Errorf("trade = {Price:%d, Qty:%d}, 期望 {100, 10}", trades[0].Price, trades[0].Qty)
 	}
 }

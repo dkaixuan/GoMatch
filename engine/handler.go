@@ -7,6 +7,7 @@ import (
 
 	"exchange/eventbus"
 	"exchange/matching"
+	"exchange/store"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -24,15 +25,20 @@ type PlaceOrderRequest struct {
 
 // SetupRouter 创建 Gin 路由。
 func SetupRouter(e *Engine) *gin.Engine {
-	return SetupRouterWithBus(e, nil)
+	return SetupRouterFull(e, nil, nil)
+}
+
+// SetupRouterWithBus 创建带 WebSocket 的路由(向后兼容)。
+func SetupRouterWithBus(e *Engine, bus *eventbus.EventBus) *gin.Engine {
+	return SetupRouterFull(e, bus, nil)
 }
 
 var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// SetupRouterWithBus 创建带 WebSocket 推送的 Gin 路由。
-func SetupRouterWithBus(e *Engine, bus *eventbus.EventBus) *gin.Engine {
+// SetupRouterFull 创建完整路由。
+func SetupRouterFull(e *Engine, bus *eventbus.EventBus, ts store.TradeStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
@@ -80,6 +86,24 @@ func SetupRouterWithBus(e *Engine, bus *eventbus.EventBus) *gin.Engine {
 		}
 		c.Status(http.StatusOK)
 	})
+
+	// GET /trades — 查询历史成交
+	if ts != nil {
+		r.GET("/trades", func(c *gin.Context) {
+			symbol := c.DefaultQuery("symbol", "ETH/USD")
+			limitStr := c.DefaultQuery("limit", "20")
+			limit, _ := strconv.Atoi(limitStr)
+			if limit <= 0 || limit > 100 {
+				limit = 20
+			}
+			trades, err := ts.ListTrades(symbol, limit)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, trades)
+		})
+	}
 
 	// GET /ws — WebSocket 实时推送
 	if bus != nil {

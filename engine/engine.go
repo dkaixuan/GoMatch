@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"exchange/eventbus"
 	"exchange/ledger"
 	"exchange/matching"
+	"exchange/store"
 )
 
 // OpType 表示命令类型
@@ -35,13 +37,14 @@ type Result struct {
 
 // Engine 用一个 goroutine 独占 Book, 通过 channel 接收命令。
 type Engine struct {
-	book   *matching.Book
-	cmds   chan Command
-	ledger *ledger.Ledger      // 可选, nil 表示不做余额检查
-	bus    *eventbus.EventBus  // 可选, nil 表示不发事件
-	base   string              // 如 "ETH"
-	quote  string              // 如 "USD"
-	symbol matching.Symbol
+	book       *matching.Book
+	cmds       chan Command
+	ledger     *ledger.Ledger      // 可选
+	bus        *eventbus.EventBus  // 可选
+	tradeStore store.TradeStore    // 可选
+	base       string
+	quote      string
+	symbol     matching.Symbol
 }
 
 // NewEngine 创建引擎(无 Ledger, 向后兼容)。
@@ -67,6 +70,11 @@ func NewEngineWithLedger(l *ledger.Ledger, base, quote string) *Engine {
 // SetEventBus 设置事件总线(可选)。
 func (e *Engine) SetEventBus(bus *eventbus.EventBus) {
 	e.bus = bus
+}
+
+// SetTradeStore 设置成交记录存储(可选)。
+func (e *Engine) SetTradeStore(ts store.TradeStore) {
+	e.tradeStore = ts
 }
 
 // Run 是引擎的主循环, 应在独立 goroutine 中运行:
@@ -207,6 +215,22 @@ func (e *Engine) handlePlace(cmd Command) {
 		}
 		if len(trades) > 0 {
 			e.bus.Publish(eventbus.Event{Type: "book_update", Symbol: e.symbol, Data: e.book.Snapshot()})
+		}
+	}
+
+	// 6. 存储成交记录
+	if e.tradeStore != nil {
+		for _, trade := range trades {
+			e.tradeStore.SaveTrade(store.TradeRecord{
+				TakerOrderID:  trade.TakerOrderID,
+				MakerOrderID:  trade.MakerOrderID,
+				BuyerOwnerID:  trade.BuyerOwnerID,
+				SellerOwnerID: trade.SellerOwnerID,
+				Symbol:        e.symbol.String(),
+				Price:         trade.Price,
+				Qty:           trade.Qty,
+				CreatedAt:     time.Now(),
+			})
 		}
 	}
 
